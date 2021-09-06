@@ -1,0 +1,35 @@
+{
+  "name": "nodeSSA",
+  "version": "1.0.0",
+  "description": "Very first commit of SAA-app.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IoTAdri/nodeSSA.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/IoTAdri/nodeSSA/issues"
+  },
+  "homepage": "https://github.com/IoTAdri/nodeSSA#readme",
+  "dependencies": {
+    "@iota/iota.js": "github:iotaledger/iota.js#main",
+    "@iota/mam.js": "github:iotaledger/mam.js#main",
+    "@pinata/sdk": "^1.1.23",
+    "axios": "^0.21.1",
+    "colors": "^1.4.0",
+    "eccrypto-js": "^5.4.0",
+    "formdata-node": "^3.5.4",
+    "ipfs-core": "^0.8.0",
+    "luxon": "^1.26.0",
+    "node-fetch": "npm:@achingbrain/node-fetch@^2.6.7",
+    "prompt-sync": "^4.2.0",
+    "recursive-fs": "^2.1.0",
+    "secrets.js-grempe": "^2.0.0"
+  }
+}
