@@ -67,19 +67,12 @@ async function pinToIPFS(data) {
 }
 
 async function retrieveCID(targetCID) {
-    console.log(targetCID);
     const url = "https://gateway.pinata.cloud/ipfs/".concat(targetCID);
-    console.log(url);
     let retrieved;
     await fetch(url)
         .then(res => res.json())
-        .then(json => {console.log(json); console.log("retrieved json: " + JSON.stringify(json)); retrieved = JSON.stringify(json)});
-    console.log("retrieved: " + retrieved);
-    try {
-        fs.writeFileSync("./json/eventList.json", retrieved);
-      } catch (e) {
-        console.error(e);
-      }
+        .then(json => {retrieved = JSON.stringify(json)});
+    return retrieved;
 }
 
 async function run() {
@@ -108,7 +101,7 @@ async function run() {
     console.log("RETRIEVING");
     console.log(cid);
     if(cid != '') {
-        retrieveCID(cid);
+        await retrieveCID(cid);
     }
     console.log("RETRIEVED!");
 }

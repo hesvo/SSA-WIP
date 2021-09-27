@@ -22,6 +22,10 @@ const prompt = require("prompt-sync")({ sigint: true });
 const colors = require("colors");
 const axios = require("axios");
 const pinataSDK = require("@pinata/sdk");
+const secrets = require("secrets.js-grempe");
+const crypto = require("crypto");
+const pinata = pinataSDK(pinataKey, pinataSKey);
+
 
 
 let walletState;
@@ -37,7 +41,7 @@ let mamOpen = true;
 let publicEventRoot = "";
 let channelState = "";
 let privateOrganiserInformation;
-let oCID = "";
+let prCID = "";
 let pCID = "";
 let aCID = "";
 let shamirQR = true;
@@ -47,24 +51,67 @@ const apiBaseURL = "https://api.pinata.cloud"
 const pinataNode = '{{ apiBaseURL }} /pinning/pinFileToIPFS';
 const pinataKey = "d83e4ab290b19d2e56ba";
 const pinataSKey = "2092d06158aefc30d8dea3fd9faabf9c4115e731e79ae2c6bcf22d08043a66f1";
-const pinata = pinataSDK(pinataKey, pinataSKey);
 
 let usedShares = new Array();
 
 
+function encryptAES(payload, pass) {
+
+  let data = JSON.stringify(payload);
+
+  
+  const key = Buffer.from(pass, 'hex');
+  const iv = crypto.randomBytes(16);
+ 
+  const cipher = crypto.createCipheriv('aes-256-ctr', Buffer.from(pass, 'hex'), iv);
+
+  const cText = cipher.update(data, 'utf8', 'hex') + cipher.final('hex');
+
+  let payloadEnc = cText;
+
+  const hexIV = iv.toString('hex');
+
+  return {payloadEnc, hexIV};
+}
+
 async function uploadEventIPFS(attendeeList) {
   let options = {
     pinataMetadata: {
-      name: `${eventInformation.eventname} event data test`
+      name: `${eventInformation.eventname} event data test3`
     }
   }
   console.log(eventInformation);
-  console.log("jsond: " + JSON.stringify(eventInformation));
-  pinata.pinJSONToIPFS(JSON.parse(attendeeList), options).then((result) => {
-    console.log(result);
+
+  const ipfsKey1 = secrets.random(256);
+  const ipfsKey2 = secrets.random(256);
+
+  let encryptedData = encryptAES(attendeeList, ipfsKey1);
+
+  let pinData =  {
+    a: encryptedData.payloadEnc,
+    b: encryptedData.hexIV,
+  }
+
+  await pinata.pinJSONToIPFS(pinData, options).then((result) => {
     aCID = result.IpfsHash;
-  })
+    console.log("aCID: " + aCID);
+  });
+
+  encryptedData = encryptAES(eventInformation, ipfsKey2);
+
+  pinData =  {
+    a: encryptedData.payloadEnc,
+    b: encryptedData.hexIV,
+  }
+
+  await pinata.pinJSONToIPFS(pinData, options).then((result) => {
+    pCID = result.IpfsHash;
+  });
+
   console.log("Pinned");
+
+  console.log("public info cid: " + pCID);
+  console.log("attendee list cid: " + aCID);
 }
 
 async function readShamirWallet() {
@@ -339,7 +386,7 @@ async function closeEvent(attendeeIndex) {
   console.log("-- Event closed by organiser --".cyan);
   mamOpen = false;
 
-  //await uploadEventIPFS(JSON.stringify(payloadDataRec));
+  await uploadEventIPFS(JSON.stringify(payloadDataRec));
 }
 
 async function mamClosedStatus() {
@@ -454,6 +501,13 @@ async function run() {
     if (menuChoice == "c" && mamOpen) {
       // close the event and write the official attendeelist
       await closeEvent(attendancyAddress);
+    }
+    if (menuChoice == "i") {
+      const payloadT = {
+        count: 1,
+        ids: ["testid"],
+      };
+      await uploadEventIPFS(payloadT);
     }
     if (menuChoice == "q") {
       // exit the application

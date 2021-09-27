@@ -18,7 +18,7 @@ const colors = require("colors");
 const { strict } = require("assert");
 var secrets = require("secrets.js-grempe");
 
-const node = "https://api.lb-0.testnet.chrysalis2.com/";
+const node = "https://chrysalis-nodes.iota.org/";
 
 // the privatekey and the publickey to encrypt/decrypt attendancy-transaction
 const keyPair = generateKeyPair();
@@ -26,18 +26,18 @@ const privateOrgPrivateEventKey = keyPair.privateKey;
 const publicEventKey = keyPair.publicKey;
 
 // public organiserdetails -for demopurposes hardcoded
-const organiserName = "PlaceholderOrgName";
-const organiserAddress = "42 Answerstreet";
-const organiserPostcode = "4242RT";
-const organiserCity = "Elsewhere";
-const organiserURL = "www.reallynotafakeurl.com";
-const organiserTelephone = "06123456";
-const organiserMail = "email@email.email";
+const organiserName = "ExampleOrganiser";
+const organiserAddress = "42 Examplestreet";
+const organiserPostcode = "4242EG";
+const organiserCity = "ExampleCity";
+const organiserURL = "www.exampleurl.com";
+const organiserTelephone = "0612345678";
+const organiserMail = "example.email@gmail.com";
 const organiserDID = "did:example:123456789abcdefghi#key-1";
 
 // public eventdetails -for demopurposes hardcoded
-const privateOrgPrivateTitle = "PlaceholderPrivateOrgEventTitle";
-const eventName = "Real Event Name1";
+const privateOrgPrivateTitle = "ExamplePrivateEventTitle";
+const eventName = "Example Event Name";
 const eventDate = "March 9th 2021";
 const eventTime = "10:00 - 16:30";
 const eventLocation = "Online";
@@ -101,60 +101,41 @@ async function splitShamirSecret(
 
   registrationKey = secrets.random(256);
 
+  const dataQRPlain = publicEventRoot + attendanceNotificationKey;
+
+  let encryptedQR = encryptQR(dataQRPlain, registrationKey);
+
+  const payloadQR = {
+    a: encryptedQR.payloadEnc,
+    b: encryptedQR.hexIV,
+    expirytimestamp: expiryDateTime,
+  };
 
   let qrKey = registrationKey.slice(0,32);
   let attendeeKey = registrationKey.slice(32, 64);
 
-  const dataQRPlain = publicEventRoot + attendanceNotificationKey;
+  const allShares = secrets.share(attendeeKey, parseInt(nAttendees), 2);
+  const publicShare = allShares[0];
+  const attendeeShares = allShares.slice(1);
 
-  let testEncryptedQR = encryptQR(dataQRPlain, registrationKey);
+  const shamirSecret = qrKey + publicShare;
 
-  const payloadQR = {
-    a: testEncryptedQR.payloadEnc,
-    b: testEncryptedQR.hexIV,
-    expirytimestamp: expiryDateTime,
-  };
+  let qrShares = secrets.share(shamirSecret, parseInt(qrAmount), parseInt(qrThreshold));
 
+  attendeeQRcode = "SSA" + generateSeed(78);
 
+  for (let i = 0; i < qrShares.length; i++) {
+    qrShares[i] = qrThreshold + qrShares[i] + attendeeQRcode;
+  }
 
-  let testDecryptedQR = decryptQR(payloadQR.a, payloadQR.b, registrationKey);
-
-  // console.log(testDecryptedQR);
-  // console.log("first slice: " + testDecryptedQR.slice(0,81));
-  // console.log("second slice: " + testDecryptedQR.slice(81, 162));
-  // console.log(publicEventRoot == testDecryptedQR.slice(0,81), attendanceNotificationKey == testDecryptedQR.slice(81, 162));
-
+  
 
   console.log("PayloadQR =================".red);
   console.log(payloadQR);
   console.log("=================".red);
 
-  attendeeQRcode = "SSA" + generateSeed(78);
-
-
-
-  const apShares = secrets.share(attendeeKey, parseInt(nAttendees), 2);
-  const publicShare = apShares[0];
-  const attendeeShares = apShares.slice(1);
-
-
-  const shamirSecret = qrKey + publicShare;
-
-
-
-
-
-  
-  let qrShares = secrets.share(shamirSecret, parseInt(qrAmount), parseInt(qrThreshold));
-
   console.log(`Send these shares to attendees to use as unique registration tokens:`);
   console.log(attendeeShares);
-
-
-
-  for (let i = 0; i < qrShares.length; i++) {
-    qrShares[i] = qrThreshold + qrShares[i] + attendeeQRcode;
-  }
 
   console.log(`Attendee QR-seed : ${attendeeQRcode}`.cyan);
   console.log(`Public share(recovered with QR codes): ${publicShare}`.green);
@@ -174,7 +155,7 @@ async function splitShamirSecret(
   );
 
   saveSharesQR(qrShares); // SEED    : plus sidekey?!
-  saveSharesAttendee(apShares);
+  saveSharesAttendee(allShares);
 
   console.log("Attaching =================".red);
   console.log("Attaching Eventmessage to tangle, please wait...");
@@ -196,7 +177,7 @@ function encryptQR(payload, pass) {
 
   
   const key = Buffer.from(pass, 'hex');
-  const iv = crypto.randomBytes(16);
+  const iv = ppto.randomBytes(16);
  
   const cipher = crypto.createCipheriv('aes-256-ctr', Buffer.from(pass, 'hex'), iv);
 

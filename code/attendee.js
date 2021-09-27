@@ -26,7 +26,7 @@ const crypto = require("crypto");
 var secrets = require("secrets.js-grempe");
 
 
-const node = "https://api.hornet-1.testnet.chrysalis2.com";
+const node = "https://chrysalis-nodes.iota.org/";
 const commonSideKey =
   "SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSA";
 
@@ -36,12 +36,12 @@ let expdatetime = "";
 let eventInformation = "";
 
 // Personal information to calculate the Merkle-root
-const personalFirstName = "Robert";
+const personalFirstName = "John";
 const personalSurname = "Smith";
 const personalBirthdate = "19980820";
-const personalMail = "robertsmith@gmail.com";
+const personalMail = "johnsmith@gmail.com";
 const personalDID = "did:example:123456789abcdefghi#key-1";
-const organisation = "International Red Cross";
+const organisation = "An Organisation";
 // for demo-purpose
 const personalMerkleRoot =
   "ec76f5e70d24137494dbade31136119b52458b19105fd7e5b5812f4de38b82d1";
@@ -103,6 +103,7 @@ function readQRShamir() {
     return;
   }
 
+  console.log(extractShare);
   qrReconstruct.push(extractShare);
 
   if (shareThreshold == 0) {
@@ -111,6 +112,7 @@ function readQRShamir() {
 
   if (eventQRSeed == "") {
     eventQRSeed = qrCode.slice(132);
+    console.log("eventqr: " + eventQRSeed);
   }
 }
 
@@ -125,11 +127,6 @@ async function readShamirMam() {
 
   const qrKey = reconstructedSecret.slice(0, 32); 
   publicShare = reconstructedSecret.slice(32, 32+81);
-
-
-  let sharesArray = new Array();
-  sharesArray.push(publicShare);
-  sharesArray.push(aUniqueToken);
 
 
   const attendeeKey = secrets.combine([publicShare, aUniqueToken]);
@@ -411,6 +408,7 @@ async function run() {
   while (!theEnd) {
     let promptString = "Menu: [a]-Add QR code, [r]-Register for event, [q]-Quit: ";
     let menuChoice = prompt(promptString.green);
+    menuChoice = menuChoice.toLowerCase();
     if (menuChoice == "a") {
       // show current list of transactions on the Tangle
       readQRShamir();
@@ -420,6 +418,9 @@ async function run() {
       // show the details of the current transactions on the Tangle
       await readShamirMam();
       await mamInteract(eventQRSeed);
+    }
+    if (menuChoice == "c") {
+      
     }
     if (menuChoice == "q") {
       // exit the application

@@ -33,13 +33,73 @@ function getEventInfo(mamData) {
   return fMessage;
 }
 
+function decryptAES(data, ivEnc, pass) {
+
+  const key = Buffer.from(pass, 'hex');
+  const toDecipher = data;
+  const iv = Buffer.from(ivEnc, 'hex');
+
+  const decipher = crypto.createDecipheriv('aes-256-ctr', Buffer.from(pass, 'hex'), iv);
+
+  const decryptedData = decipher.update(toDecipher, 'hex', 'utf8') + decipher.final('utf8');
+
+  return decryptedData;
+}
+
+function verifyIPFS() {
+
+  let codeLength = code.length;
+  if (codeLength > 164) {
+    // length indicates personalInformation is included
+    personalInfo = code.slice(0, codeLength - 164);
+    code = code.slice(-164);
+  }
+  code = degarble(code);
+  let crccode = code.slice(-5).toLowerCase();
+  let idstring = code.slice(0, 64).toLowerCase();
+  let rootcode = code.slice(64, -18);
+  let timecode = code.slice(-18, -5);
+  let rest = idstring + rootcode + timecode + personalInfo + "SSAsaltQ3v%";
+  //DEBUGINFO
+  //   console.log(`crccode :${crccode}`);
+  //   console.log(`idstring :${idstring}`);
+  //   console.log(`rootcode :${rootcode}`);
+  //   console.log(`timecode :${timecode}`);
+  //   console.log(`rest :${rest}`);
+
+  let crcValueString = await hashHash(rest);
+  let crcValue = crcValueString.slice(-5);
+  if (crccode == crcValue) {
+    publicEventRoot = rootcode;
+    attendeeToken = await hashHash(idstring);
+    // console.log(`attendeeToken :${attendeeToken}`);
+    qrTime = luxon.DateTime.fromMillis(parseInt(timecode));
+    let nowTime = luxon.DateTime.now();
+    let timeDiff = nowTime.diff(qrTime);
+    if (timeDiff.as(`minutes`) > 5)
+      console.log(
+        `Suspicious behaviour : QR-code is older than 5 minutes!`.underline
+          .brightRed
+      );
+    console.log(
+      `QR-code was generated ${parseInt(
+        timeDiff.as(`minutes`)
+      )} minutes ago at: ${qrTime.toISO()}`.yellow
+    );
+    return true;
+  }
+  console.log("-- QR code is incorrect! --".red);
+  return false;
+}
+
+
 // readAttendeeQR
 function readQR() {
   // Try and load the QR-root from file - as substitute for QRscan from camera
   try {
     const data = fs.readFileSync("./json/verifierQR.json", "utf8");
     return data;
-  } catch (err) {}
+  } catch (err) { }
 }
 
 async function checkQR(code) {
@@ -146,7 +206,7 @@ function loadAttendeeTokens(mamAttendeeMessage) {
 }
 
 async function checkAttendedIPFS(ID, idList) {
-  
+
 }
 
 function checkAttended(ID, idList) {
