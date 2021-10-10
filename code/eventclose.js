@@ -24,9 +24,12 @@ const axios = require("axios");
 const pinataSDK = require("@pinata/sdk");
 const secrets = require("secrets.js-grempe");
 const crypto = require("crypto");
+
+
+const pinataNode = '{{ apiBaseURL }} /pinning/pinFileToIPFS';
+const pinataKey = "d83e4ab290b19d2e56ba";
+const pinataSKey = "2092d06158aefc30d8dea3fd9faabf9c4115e731e79ae2c6bcf22d08043a66f1";
 const pinata = pinataSDK(pinataKey, pinataSKey);
-
-
 
 let walletState;
 const node = "https://api.hornet-1.testnet.chrysalis2.com";
@@ -47,10 +50,6 @@ let aCID = "";
 let shamirQR = true;
 
 const apiBaseURL = "https://api.pinata.cloud"
-
-const pinataNode = '{{ apiBaseURL }} /pinning/pinFileToIPFS';
-const pinataKey = "d83e4ab290b19d2e56ba";
-const pinataSKey = "2092d06158aefc30d8dea3fd9faabf9c4115e731e79ae2c6bcf22d08043a66f1";
 
 let usedShares = new Array();
 

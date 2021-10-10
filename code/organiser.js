@@ -177,7 +177,7 @@ function encryptQR(payload, pass) {
 
   
   const key = Buffer.from(pass, 'hex');
-  const iv = ppto.randomBytes(16);
+  const iv = crypto.randomBytes(16);
  
   const cipher = crypto.createCipheriv('aes-256-ctr', Buffer.from(pass, 'hex'), iv);
 
