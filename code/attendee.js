@@ -10,7 +10,9 @@ const {
   TrytesHelper,
   channelRoot,
   createChannel,
+  mamFetchAll,
 } = require("@iota/mam.js");
+
 const {
   bufferToHex,
   hexToBuffer,
@@ -47,17 +49,46 @@ const personalMerkleRoot =
   "ec76f5e70d24137494dbade31136119b52458b19105fd7e5b5812f4de38b82d1";
 let eventPersonalMerkleRoot;
 let qrReconstruct = new Array();
-let aUniqueToken;
+let aUniqueShare;
 let publicShare;
 let shareThreshold = 0;
 let eventQRSeed = "";
+let pCID = "";
+let aCID = "";
+let ipfsKey = "";
 
 function readQR() {
   // Try and load the QR-root from file - as substitute for QRscan from camera
   try {
     const data = fs.readFileSync("./json/QRcode.json", "utf8");
     return data;
-  } catch (err) {console.log(err)}
+  } catch (err) { console.log(err) }
+}
+
+async function retrieveClose() {
+  const mode = "restricted";
+  const sideKey = commonSideKey;
+  let eventClosed = false;
+
+  let fMessage = "";
+  const fetched = await mamFetchAll(node, publicEventRoot, mode, sideKey);
+  if (fetched && fetched.length > 0) {
+    for (let i = 0; i < fetched.length; i++) {
+      const element = fetched[i].message;
+      fMessage = JSON.parse(TrytesHelper.toAscii(element));
+      if (fMessage.message == "Event closed") {
+        pCID = fMessage.publicCID;
+        aCID = fMessage.attendeeCID;
+        ipfsKey = fMessage.ipfsKey;
+        saveEventToWallet();
+        eventClosed = true;
+        console.log("Close message received".green)
+      }
+    }
+    if (!eventClosed) {
+      console.log("Event has not been closed.".red);
+    }
+  }
 }
 
 // load qr shares from file, demo purpose
@@ -65,14 +96,14 @@ function loadShares() {
   try {
     const data = fs.readFileSync("./json/QRshares.json", "utf8");
     return JSON.parse(data);
-  } catch (err) {console.log(eer)}
+  } catch (err) { console.log(eer) }
 }
 
 function loadAttendeeShare() {
   try {
     const data = fs.readFileSync("./json/attendeeShares.json", "utf8");
     return JSON.parse(data).attendeeShares[1];
-  } catch (err) {console.log(eer)}
+  } catch (err) { console.log(eer) }
 }
 
 function decryptQR(data, ivEnc, pass) {
@@ -92,8 +123,13 @@ function readQRShamir() {
 
   let qrCode = prompt("QR code to add (use 1-5 for QR from file (demo)): ");
 
-  if (Array.from(Array(5).keys()).indexOf(parseInt(qrCode)-1) != -1) {
-    qrCode = loadShares().qrShares[parseInt(qrCode)-1];
+  if (Array.from(Array(5).keys()).indexOf(parseInt(qrCode) - 1) != -1) {
+    qrCode = loadShares().qrShares[parseInt(qrCode) - 1];
+  }
+
+
+  if (shareThreshold == 0) {
+    shareThreshold = qrCode.slice(0, 1);
   }
 
   let extractShare = qrCode.slice(1, 132);
@@ -103,33 +139,23 @@ function readQRShamir() {
     return;
   }
 
-  console.log(extractShare);
   qrReconstruct.push(extractShare);
 
-  if (shareThreshold == 0) {
-    shareThreshold = qrCode.slice(0, 1);
-  }
 
   if (eventQRSeed == "") {
     eventQRSeed = qrCode.slice(132);
-    console.log("eventqr: " + eventQRSeed);
   }
 }
 
 async function readShamirMam() {
 
-  if (qrReconstruct.length < shareThreshold || shareThreshold == 0) {
-    console.log("Not enough QR codes to register.");
-    return;
-  }
-
   let reconstructedSecret = secrets.combine(qrReconstruct);
 
-  const qrKey = reconstructedSecret.slice(0, 32); 
-  publicShare = reconstructedSecret.slice(32, 32+81);
+  const qrKey = reconstructedSecret.slice(0, 32);
+  publicShare = reconstructedSecret.slice(32, 32 + 81);
 
 
-  const attendeeKey = secrets.combine([publicShare, aUniqueToken]);
+  const attendeeKey = secrets.combine([publicShare, aUniqueShare]);
 
   let registrationKey = qrKey + attendeeKey;
 
@@ -171,7 +197,7 @@ async function readShamirMam() {
 
 
 
-  publicEventRoot = decryptedQR.slice(0,81);
+  publicEventRoot = decryptedQR.slice(0, 81);
   attendancyAddress = decryptedQR.slice(81);
 }
 
@@ -289,6 +315,42 @@ function saveInfoToWallet() {
   }
 }
 
+function saveEventToWallet() {
+
+  const payload = {
+    er: publicEventRoot,
+    publicCID: pCID,
+    attendeeCID: aCID,
+    storageKey: ipfsKey,
+  };
+
+  // Store personal eventinformation in Wallet
+  // to be used for generating a new verifierQR anytime
+  console.log("Save data to wallet >>>>>>>>".green);
+  try {
+    fs.writeFileSync(
+      "./json/eventWallet.json",
+      JSON.stringify(payload, undefined, "\t")
+    );
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function getSavedRoot() {
+  // Try and load the wallet personalinfo from json file
+  let pData
+  try {
+    const storedData = fs.readFileSync("./json/personalWallet.json");
+    if (storedData) {
+      pData = JSON.parse(storedData.toString());
+      publicEventRoot = pData.er;
+    }
+  } catch (e) {
+    console.log(`Error : ${e}`);
+  }
+}
+
 async function hashHash(mroot) {
   let element = await sha256(utf8ToBuffer(mroot));
   return bufferToHex(element);
@@ -338,7 +400,7 @@ async function mamInteract() {
     attendeeID: merkleHash2,
     remark: payloadRemark, //HINT optional, can remain empty. Will be striped by closeevent.
     timestamp: new Date().toLocaleString(),
-    attendeeShare: aUniqueToken,
+    attendeeShare: aUniqueShare,
   };
 
   //DEBUGINFO
@@ -378,11 +440,9 @@ async function mamInteract() {
   // console.log(`Payload : `);
   // console.dir(encrypted);
   console.log("Received Message Id", sendResult.messageId);
-
-  saveInfoToWallet();
 }
 
- console.log("SSA-attendee-app".cyan);
+console.log("SSA-attendee-app".cyan);
 // let readQRcode = readQR();
 // console.log(`QRcode from file = ${readQRcode}`.yellow);
 // let eventQR = prompt("Event QR-code (*=savedversion): ");
@@ -391,11 +451,11 @@ async function mamInteract() {
 let aShare = prompt("Attendee unique token/share (*=load from file (demo)): ");
 let loadedShare = loadAttendeeShare();
 if (aShare == "*") {
-  aUniqueToken = loadedShare;
+  aUniqueShare = loadedShare;
 } else {
-  aUniqueToken = aShare;
+  aUniqueShare = aShare;
 }
-console.log(`Attendee token = ${aUniqueToken}`.blue);
+console.log(`Attendee token = ${aUniqueShare}`.blue);
 
 
 //mamInteract(eventQR);
@@ -406,7 +466,7 @@ async function run() {
 
   let theEnd = false;
   while (!theEnd) {
-    let promptString = "Menu: [a]-Add QR code, [r]-Register for event, [q]-Quit: ";
+    let promptString = "Menu: [a]-Add QR code, [r]-Register for event, [c]-Get Close Message info, [q]-Quit: ";
     let menuChoice = prompt(promptString.green);
     menuChoice = menuChoice.toLowerCase();
     if (menuChoice == "a") {
@@ -414,13 +474,18 @@ async function run() {
       readQRShamir();
     }
     if (menuChoice == "r") {
-      
-      // show the details of the current transactions on the Tangle
-      await readShamirMam();
-      await mamInteract(eventQRSeed);
+      if (qrReconstruct.length < shareThreshold || shareThreshold == 0) {
+        console.log("Not enough QR codes to register.");
+      } else {
+        // show the details of the current transactions on the Tangle
+        await readShamirMam();
+        await mamInteract(eventQRSeed);
+        saveInfoToWallet();
+      }
     }
     if (menuChoice == "c") {
-      
+      await getSavedRoot();
+      await retrieveClose();
     }
     if (menuChoice == "q") {
       // exit the application

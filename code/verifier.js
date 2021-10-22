@@ -4,15 +4,17 @@
 //////////////////////////////////////////////////////////
 "use strict";
 
-const { mamFetchAll, TrytesHelper } = require("@iota/mam-chrysalis.js");
+const { mamFetchAll, TrytesHelper } = require("@iota/mam.js");
 const { Converter } = require("@iota/iota.js");
 const { sha256, utf8ToBuffer, bufferToHex } = require("eccrypto-js");
 const luxon = require("luxon");
 const fs = require("fs");
 const prompt = require("prompt-sync")({ sigint: true });
 const colors = require("colors");
+const fetch = require("node-fetch");
+const crypto = require("crypto");
 
-const node = "https://api.hornet-0.testnet.chrysalis2.com";
+const node = "https://chrysalis-nodes.iota.org/";
 const commonSideKey =
   "SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSA";
 let publicEventRoot = "";
@@ -21,6 +23,9 @@ let qrTime = "";
 let eventInformation = "";
 let mamClosedTime = "";
 let personalInfo = "";
+let publicCID = "";
+let attendeeCID = "";
+let storageKey = "";
 
 async function hashHash(hashData) {
   let element = await sha256(utf8ToBuffer(hashData));
@@ -42,24 +47,54 @@ function decryptAES(data, ivEnc, pass) {
   const decipher = crypto.createDecipheriv('aes-256-ctr', Buffer.from(pass, 'hex'), iv);
 
   const decryptedData = decipher.update(toDecipher, 'hex', 'utf8') + decipher.final('utf8');
-
   return decryptedData;
 }
 
-function verifyIPFS() {
+async function retrieveCID(targetCID) {
+  const url = "https://gateway.pinata.cloud/ipfs/".concat(targetCID);
+  let retrieved;
+  await fetch(url)
+    .then(res => res.json())
+    .then(json => { retrieved = JSON.stringify(json) });
+  return retrieved;
+}
+
+async function getIPFSData(targetCID, decryptKey) {
+  let ipfsData = JSON.parse(await retrieveCID(targetCID));
+
+  let encryptedData = ipfsData.a;
+  let hexIV = ipfsData.b;
+
+  let eventInfo = JSON.parse(decryptAES(encryptedData, hexIV, decryptKey));
+  return eventInfo;
+}
+
+// readAttendeeQR
+function readQR() {
+  // Try and load the QR-root from file - as substitute for QRscan from camera
+  try {
+    const data = fs.readFileSync("./json/verifierQR.json", "utf8");
+    return data;
+  } catch (err) { }
+}
+
+async function checkIPFS(code) {
+  // check integrity of QR-code
 
   let codeLength = code.length;
-  if (codeLength > 164) {
+  if (codeLength > 239) {
     // length indicates personalInformation is included
-    personalInfo = code.slice(0, codeLength - 164);
-    code = code.slice(-164);
+    personalInfo = code.slice(0, codeLength - 239);
+    code = code.slice(-239);
   }
-  code = degarble(code);
-  let crccode = code.slice(-5).toLowerCase();
-  let idstring = code.slice(0, 64).toLowerCase();
-  let rootcode = code.slice(64, -18);
+  let crccode = code.slice(-5);
+  let idToken = code.slice(0,65);
+  let idstring = degarble(idToken).toLowerCase();
+  let pubCID = code.slice(65, 111);
+  let attCID = code.slice(111, 157);
+  let storeKey = code.slice(157, 221);
   let timecode = code.slice(-18, -5);
-  let rest = idstring + rootcode + timecode + personalInfo + "SSAsaltQ3v%";
+  let rest = idToken + pubCID + attCID + storeKey + timecode + personalInfo + "SSAsaltQ3v%";
   //DEBUGINFO
   //   console.log(`crccode :${crccode}`);
   //   console.log(`idstring :${idstring}`);
@@ -70,7 +105,9 @@ function verifyIPFS() {
   let crcValueString = await hashHash(rest);
   let crcValue = crcValueString.slice(-5);
   if (crccode == crcValue) {
-    publicEventRoot = rootcode;
+    publicCID = pubCID;
+    attendeeCID = attCID;
+    storageKey = storeKey;
     attendeeToken = await hashHash(idstring);
     // console.log(`attendeeToken :${attendeeToken}`);
     qrTime = luxon.DateTime.fromMillis(parseInt(timecode));
@@ -90,16 +127,6 @@ function verifyIPFS() {
   }
   console.log("-- QR code is incorrect! --".red);
   return false;
-}
-
-
-// readAttendeeQR
-function readQR() {
-  // Try and load the QR-root from file - as substitute for QRscan from camera
-  try {
-    const data = fs.readFileSync("./json/verifierQR.json", "utf8");
-    return data;
-  } catch (err) { }
 }
 
 async function checkQR(code) {
@@ -205,10 +232,6 @@ function loadAttendeeTokens(mamAttendeeMessage) {
   return aList;
 }
 
-async function checkAttendedIPFS(ID, idList) {
-
-}
-
 function checkAttended(ID, idList) {
   // check if attendeeID is on the list of registeredIDs
   if (idList.indexOf(ID) === -1) {
@@ -250,38 +273,73 @@ async function run() {
   console.log(`VerificationQR : ${verificationQR}`.green);
   let eventQR = prompt("Verification QR-code (*=savedversion): ");
   if (eventQR === "*") eventQR = verificationQR;
+  let ipfsQR = false;
+  let menuChoice = prompt(
+    `IPFS QR code? [y,N] :`.yellow
+  );
+  if (menuChoice.toUpperCase() === "Y") ipfsQR = true;
 
-  let qrOkay = await checkQR(eventQR);
+  let qrOkay;
+  if (ipfsQR) {
+    qrOkay = await checkIPFS(eventQR);
+  } else {
+    qrOkay = await checkQR(eventQR);
+  }
   if (!qrOkay) {
     console.log("-- Verification aborted --".red);
     return;
   } else {
-    // readEventInfo
-    let allMamData = await readWholeMam(publicEventRoot);
-    eventInformation = getEventInfo(allMamData[0]);
-    if (eventInformation.eventPublicKey.length > 0) {
-      // show eventinfo
-      presentEventInfo(eventInformation);
-      if (mamStillOpenStatus(allMamData)) {
-        console.log(
-          `Eventregistration is open at this moment, no check possible.`
-            .brightRed
-        );
-        return;
-      }
-      console.log(`The eventregistration was closed at : ${mamClosedTime}`);
+    if (ipfsQR) {
+      let eventInformation = await getIPFSData(publicCID, storageKey);
+      let attList = await getIPFSData(attendeeCID, storageKey);
 
-      const attendeeList = loadAttendeeTokens(allMamData[1]);
-      // checkAttendeeOnList
-      if (personalInfo) {
-        console.log(
-          `Included personalinformation : ${personalInfo.slice(0, -2)}`.yellow
-        );
-      } else {
-        console.log(`NO personal information was included`.red);
+      if (eventInformation.eventPublicKey.length > 0) {
+        // show eventinfo
+        presentEventInfo(eventInformation);
+        let attendeeList = [];
+        attendeeList = attendeeList.concat(JSON.parse(attList).ids);
+        // checkAttendeeOnList
+        if (personalInfo) {
+          console.log(
+            `Included personalinformation : ${personalInfo.slice(0, -2)}`.yellow
+          );
+        } else {
+          console.log(`NO personal information was included`.red);
+        }
+
+        checkAttended(attendeeToken, attendeeList);
+
       }
 
-      checkAttended(attendeeToken, attendeeList);
+    } else {
+      // readEventInfo
+      let allMamData = await readWholeMam(publicEventRoot);
+      eventInformation = getEventInfo(allMamData[0]);
+      if (eventInformation.eventPublicKey.length > 0) {
+        // show eventinfo
+        presentEventInfo(eventInformation);
+        if (mamStillOpenStatus(allMamData)) {
+          console.log(
+            `Event registration is open at this moment, no check possible.`
+              .brightRed
+          );
+          return;
+        }
+        console.log(`The event registration was closed at : ${mamClosedTime}`);
+
+        const attendeeList = loadAttendeeTokens(allMamData[1]);
+        // checkAttendeeOnList
+        if (personalInfo) {
+          console.log(
+            `Included personalinformation : ${personalInfo.slice(0, -2)}`.yellow
+          );
+        } else {
+          console.log(`NO personal information was included`.red);
+        }
+
+        checkAttended(attendeeToken, attendeeList);
+
+      }
     }
   }
 }

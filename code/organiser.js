@@ -128,8 +128,6 @@ async function splitShamirSecret(
     qrShares[i] = qrThreshold + qrShares[i] + attendeeQRcode;
   }
 
-  
-
   console.log("PayloadQR =================".red);
   console.log(payloadQR);
   console.log("=================".red);
@@ -175,10 +173,8 @@ function encryptQR(payload, pass) {
 
   let data = payload;
 
-  
   const key = Buffer.from(pass, 'hex');
-  const iv = ppto.randomBytes(16);
- 
+  const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv('aes-256-ctr', Buffer.from(pass, 'hex'), iv);
 
   const cText = cipher.update(data, 'utf8', 'hex') + cipher.final('hex');
@@ -198,14 +194,14 @@ function decryptQR(data, ivEnc, pass) {
 
   const decipher = crypto.createDecipheriv('aes-256-ctr', Buffer.from(pass, 'hex'), iv);
 
-  const decrypted1 = decipher.update(toDecipher, 'hex', 'utf8') + decipher.final('utf8');
+  const decryptedData = decipher.update(toDecipher, 'hex', 'utf8') + decipher.final('utf8');
 
-  return decrypted1;
+  return decryptedData;
 }
 
 
 function hashKeyFromPass(pass) {
-  return crypto.createHash('md5').update(pass).digest();
+  return crypto.createHash('sha256').update(pass).digest();
 }
 
 

@@ -9,6 +9,7 @@ const luxon = require("luxon");
 const fs = require("fs");
 const prompt = require("prompt-sync")({ sigint: true });
 const colors = require("colors");
+const { parse } = require("path");
 
 async function readInfoFromWallet() {
   // Try and load the wallet personalinfo from json file
@@ -22,6 +23,19 @@ async function readInfoFromWallet() {
     console.log(`Error : ${e}`);
   }
   console.log(`Name : ${parsedData.firstname} ${parsedData.lastname}`.green);
+  return parsedData;
+}
+
+async function readEventWallet() {
+  let parsedData;
+  try {
+    const eventInfo = fs.readFileSync("./json/eventWallet.json");
+    if (eventInfo) {
+      parsedData = JSON.parse(eventInfo.toString());
+    }
+  } catch (e) {
+    console.log(`Error : ${e}`);
+  }
   return parsedData;
 }
 
@@ -75,26 +89,51 @@ async function run() {
   );
   if (menuChoice.toUpperCase() === "Y") includePersonalData = true;
 
+  let qrTypeIPFS = false;
+  menuChoice = prompt(
+    `IPFS QR code? [y,N] :`.yellow
+  );
+  if (menuChoice.toUpperCase() === "Y") qrTypeIPFS = true;
+
   console.log(`Generating....`);
   const personalInformation = await readInfoFromWallet();
+  const eventInformation = await readEventWallet();
   console.log(`mr : ${personalInformation.mr}`);
-  let eventPersonalMerkleRoot = personalInformation.mr + personalInformation.er;
+  console.log(`er : ${eventInformation.er}`);
+
+  let eventPersonalMerkleRoot = personalInformation.mr + eventInformation.er;
   const merkleHash = await hashHash(eventPersonalMerkleRoot);
   const nowEpoch = luxon.DateTime.now().toMillis();
   let stringWord = nowEpoch;
-  let verifierQR =
-    bufferToHex(merkleHash) + personalInformation.er + stringWord;
+  let verifierQR;
+
+
+
+  if (qrTypeIPFS) {
+
+    verifierQR = bufferToHex(merkleHash);
+    verifierQR = verifierQR.toUpperCase();
+    verifierQR = engarble(verifierQR);
+    
+    verifierQR += eventInformation.publicCID + eventInformation.attendeeCID + eventInformation.storageKey + stringWord;
+
+  } else {
+    verifierQR = bufferToHex(merkleHash) + eventInformation.er + stringWord;
+  }
+
+
+
   let personalString = "";
   if (includePersonalData)
     personalString = `${personalInformation.firstname} ${personalInformation.lastname}, ${personalInformation.birthdate}//`;
   const crcCheck = await hashHash(verifierQR + personalString + "SSAsaltQ3v%");
   verifierQR += crcCheck.slice(-5);
-  verifierQR = verifierQR.toUpperCase();
-  console.log("vQR berfore: " + verifierQR);
-  console.log(verifierQR.length);
-  verifierQR = engarble(verifierQR);
-  console.log("after engarble: " + verifierQR);
-  console.log(verifierQR.length);
+
+  if (!qrTypeIPFS) {
+    verifierQR = verifierQR.toUpperCase();
+    verifierQR = engarble(verifierQR);
+  }
+
   if (includePersonalData) verifierQR = personalString + verifierQR;
   console.log(`VerifierQR : ${verifierQR}`.green);
   saveVerifierQR(verifierQR);
@@ -103,6 +142,7 @@ async function run() {
     `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${verifierQR}`
       .yellow
   );
+
 }
 
 run();

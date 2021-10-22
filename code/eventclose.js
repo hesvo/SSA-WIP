@@ -21,15 +21,20 @@ const fs = require("fs");
 const prompt = require("prompt-sync")({ sigint: true });
 const colors = require("colors");
 const axios = require("axios");
-const pinataSDK = require("@pinata/sdk");
 const secrets = require("secrets.js-grempe");
 const crypto = require("crypto");
+const pinataSDK = require("@pinata/sdk");
+
+
+const pinataKey = "d83e4ab290b19d2e56ba";
+const pinataSKey = "2092d06158aefc30d8dea3fd9faabf9c4115e731e79ae2c6bcf22d08043a66f1";
+
 const pinata = pinataSDK(pinataKey, pinataSKey);
 
 
 
 let walletState;
-const node = "https://api.hornet-1.testnet.chrysalis2.com";
+const node = "https://chrysalis-nodes.iota.org/";
 const commonSideKey =
   "SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSACOMMONKEY9SSA";
 let privateSideKey = "";
@@ -41,16 +46,15 @@ let mamOpen = true;
 let publicEventRoot = "";
 let channelState = "";
 let privateOrganiserInformation;
-let prCID = "";
 let pCID = "";
 let aCID = "";
+let ipfsKey = "";
+
 let shamirQR = true;
 
 const apiBaseURL = "https://api.pinata.cloud"
 
 const pinataNode = '{{ apiBaseURL }} /pinning/pinFileToIPFS';
-const pinataKey = "d83e4ab290b19d2e56ba";
-const pinataSKey = "2092d06158aefc30d8dea3fd9faabf9c4115e731e79ae2c6bcf22d08043a66f1";
 
 let usedShares = new Array();
 
@@ -58,54 +62,55 @@ let usedShares = new Array();
 function encryptAES(payload, pass) {
 
   let data = JSON.stringify(payload);
-
   
   const key = Buffer.from(pass, 'hex');
   const iv = crypto.randomBytes(16);
- 
   const cipher = crypto.createCipheriv('aes-256-ctr', Buffer.from(pass, 'hex'), iv);
 
-  const cText = cipher.update(data, 'utf8', 'hex') + cipher.final('hex');
-
-  let payloadEnc = cText;
+  const payloadEncrypted = cipher.update(data, 'utf8', 'hex') + cipher.final('hex');
 
   const hexIV = iv.toString('hex');
 
-  return {payloadEnc, hexIV};
+  return {payloadEncrypted, hexIV};
 }
 
 async function uploadEventIPFS(attendeeList) {
   let options = {
     pinataMetadata: {
-      name: `${eventInformation.eventname} event data test3`
+      name: `${eventInformation.eventname} public event data (demo:1)`
     }
   }
-  console.log(eventInformation);
 
-  const ipfsKey1 = secrets.random(256);
-  const ipfsKey2 = secrets.random(256);
+  const encryptKey = secrets.random(256);
+  ipfsKey = encryptKey;
 
-  let encryptedData = encryptAES(attendeeList, ipfsKey1);
+  let encryptedData = encryptAES(eventInformation, ipfsKey);
 
   let pinData =  {
-    a: encryptedData.payloadEnc,
-    b: encryptedData.hexIV,
-  }
-
-  await pinata.pinJSONToIPFS(pinData, options).then((result) => {
-    aCID = result.IpfsHash;
-    console.log("aCID: " + aCID);
-  });
-
-  encryptedData = encryptAES(eventInformation, ipfsKey2);
-
-  pinData =  {
-    a: encryptedData.payloadEnc,
+    a: encryptedData.payloadEncrypted,
     b: encryptedData.hexIV,
   }
 
   await pinata.pinJSONToIPFS(pinData, options).then((result) => {
     pCID = result.IpfsHash;
+    console.log("aCID: " + aCID);
+  });
+
+  options = {
+    pinataMetadata: {
+      name: `${eventInformation.eventname} attendee list (demo:1)`
+    }
+  }
+
+  encryptedData = encryptAES(attendeeList, ipfsKey);
+
+  pinData =  {
+    a: encryptedData.payloadEncrypted,
+    b: encryptedData.hexIV,
+  }
+
+  await pinata.pinJSONToIPFS(pinData, options).then((result) => {
+    aCID = result.IpfsHash;
   });
 
   console.log("Pinned");
@@ -294,6 +299,9 @@ async function writeCloseMessage(mamChannelState) {
   const payloadClose = {
     message: "Event closed",
     date: nowTime.toISO(),
+    publicCID: pCID,
+    attendeeCID: aCID,
+    ipfsKey: ipfsKey,
   };
 
   const mamCloseMessage = createMessage(
@@ -381,12 +389,12 @@ async function closeEvent(attendeeIndex) {
     `You can view the mam channel here \n https://explorer.iota.org/chrysalis/streams/0/${mamMessage.root}/${mode}/${sideKey}`
   );
   console.log("===============================".yellow);
+  await uploadEventIPFS(JSON.stringify(payloadDataRec));
   await writeCloseMessage(channelState);
   console.log("===============================".yellow);
   console.log("-- Event closed by organiser --".cyan);
   mamOpen = false;
 
-  await uploadEventIPFS(JSON.stringify(payloadDataRec));
 }
 
 async function mamClosedStatus() {
