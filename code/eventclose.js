@@ -89,7 +89,6 @@ async function uploadEventIPFS(attendeeList) {
 
   await pinata.pinJSONToIPFS(pinData, options).then((result) => {
     pCID = result.IpfsHash;
-    console.log("aCID: " + aCID);
   });
 
   options = {
@@ -109,10 +108,7 @@ async function uploadEventIPFS(attendeeList) {
     aCID = result.IpfsHash;
   });
 
-  console.log("Pinned");
 
-  console.log("public info cid: " + pCID);
-  console.log("attendee list cid: " + aCID);
 }
 
 async function readShamirWallet() {
