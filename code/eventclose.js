@@ -31,12 +31,6 @@ const pinataSKey = "2092d06158aefc30d8dea3fd9faabf9c4115e731e79ae2c6bcf22d08043a
 
 const pinata = pinataSDK(pinataKey, pinataSKey);
 
-
-const pinataNode = '{{ apiBaseURL }} /pinning/pinFileToIPFS';
-const pinataKey = "d83e4ab290b19d2e56ba";
-const pinataSKey = "2092d06158aefc30d8dea3fd9faabf9c4115e731e79ae2c6bcf22d08043a66f1";
-const pinata = pinataSDK(pinataKey, pinataSKey);
-
 let walletState;
 const node = "https://chrysalis-nodes.iota.org/";
 const commonSideKey =
@@ -56,9 +50,7 @@ let ipfsKey = "";
 
 let shamirQR = true;
 
-const apiBaseURL = "https://api.pinata.cloud"
 
-const pinataNode = '{{ apiBaseURL }} /pinning/pinFileToIPFS';
 
 let usedShares = new Array();
 
